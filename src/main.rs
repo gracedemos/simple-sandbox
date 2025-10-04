@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex, mpsc};
-
 use bevy::{
     pbr::wireframe::{WireframeConfig, WireframePlugin},
     prelude::*,
@@ -7,7 +5,7 @@ use bevy::{
 };
 
 use crate::{
-    player::PlayerPosition,
+    chunk::LastChunkPos,
     worldgen::{VoxelWorld, VoxelWorldRes},
 };
 
@@ -18,11 +16,8 @@ mod voxel;
 mod worldgen;
 
 fn main() {
-    let world = VoxelWorldRes(Arc::new(VoxelWorld::new(0)));
-    let player_position = PlayerPosition(Arc::new(Mutex::new(player::SPAWN_POSITION)));
-    let world_1 = world.0.clone();
-    let player_position_1 = player_position.0.clone();
-    let _ = std::thread::spawn(move || chunk::chunk_loader(world_1, player_position_1));
+    let world = VoxelWorldRes(VoxelWorld::new(0));
+    let last_chunk_pos = LastChunkPos(IVec2::new(-1, -1));
 
     App::new()
         .add_plugins((
@@ -36,7 +31,7 @@ fn main() {
             WireframePlugin::default(),
         ))
         .insert_resource(world)
-        .insert_resource(player_position)
+        .insert_resource(last_chunk_pos)
         .add_systems(Startup, player::spawn_player)
         .add_systems(FixedUpdate, physics::physics)
         .add_systems(
@@ -44,7 +39,7 @@ fn main() {
             (
                 player::update_player_direction,
                 player::update_player_velocity,
-                chunk::chunk_handler,
+                chunk::chunk_spawner,
                 toggle_wireframe,
             ),
         )

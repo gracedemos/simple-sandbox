@@ -1,9 +1,7 @@
-use std::sync::{Arc, Mutex, mpsc::Receiver};
-
 use crate::{
-    player::{Player, PlayerPosition},
+    player::Player,
     voxel::{VOXEL_SIZE, Voxel, VoxelType},
-    worldgen::{VoxelWorld, VoxelWorldRes},
+    worldgen::VoxelWorldRes,
 };
 use bevy::{
     asset::RenderAssetUsages,
@@ -15,6 +13,9 @@ pub const CHUNK_WIDTH: usize = 32;
 pub const CHUNK_HEIGHT: usize = 64;
 pub const CHUNK_SIZE: usize = CHUNK_WIDTH * 2 * CHUNK_HEIGHT;
 pub const RENDER_DISTANCE: i32 = 2;
+
+#[derive(Resource)]
+pub struct LastChunkPos(pub IVec2);
 
 pub struct Chunk {
     pub voxels: [[[Voxel; CHUNK_WIDTH]; CHUNK_HEIGHT]; CHUNK_WIDTH],
@@ -54,18 +55,23 @@ impl Chunk {
                     }
 
                     let mut new_indices = vec![
-                        // left
                         0, 2, 1, 1, 2, 3, // right
-                        4, 5, 6, 5, 7, 6, // bottom
-                        0, 1, 4, 1, 5, 4, // top
-                        2, 6, 3, 3, 6, 7, // back
-                        0, 4, 2, 2, 4, 6, // front
-                        1, 3, 5, 3, 7, 5,
+                        4, 5, 6, 5, 7, 6, // left
+                        0, 1, 4, 1, 5, 4, // bottom
+                        2, 6, 3, 3, 6, 7, // top
+                        0, 4, 2, 2, 4, 6, // back
+                        1, 3, 5, 3, 7, 5, // front
                     ];
                     for index in new_indices.iter_mut() {
                         *index += i;
                     }
-                    indices.append(&mut new_indices);
+                    for (i, neighbor) in self.get_neighbors(x, y, z).iter().enumerate() {
+                        if !neighbor {
+                            for j in 0..6 {
+                                indices.push(new_indices[i * 6 + j]);
+                            }
+                        }
+                    }
                     i += 8;
                 }
             }
@@ -78,24 +84,67 @@ impl Chunk {
         .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices)
         .with_inserted_indices(Indices::U32(indices))
     }
+
+    fn get_neighbors(&self, x: usize, y: usize, z: usize) -> [bool; 6] {
+        let mut neighbors = [false; 6];
+        if z > 0 && z < CHUNK_WIDTH - 1 {
+            match VoxelType::from(self.voxels[z - 1][y][x].0) {
+                VoxelType::Empty => {}
+                _ => neighbors[0] = true,
+            }
+            match VoxelType::from(self.voxels[z + 1][y][x].0) {
+                VoxelType::Empty => {}
+                _ => neighbors[1] = true,
+            }
+        }
+        if y > 0 && y < CHUNK_HEIGHT - 1 {
+            match VoxelType::from(self.voxels[z][y - 1][x].0) {
+                VoxelType::Empty => {}
+                _ => neighbors[2] = true,
+            }
+            match VoxelType::from(self.voxels[z][y + 1][x].0) {
+                VoxelType::Empty => {}
+                _ => neighbors[3] = true,
+            }
+        }
+        if x > 0 && x < CHUNK_WIDTH - 1 {
+            match VoxelType::from(self.voxels[z][y][x - 1].0) {
+                VoxelType::Empty => {}
+                _ => neighbors[4] = true,
+            }
+            match VoxelType::from(self.voxels[z][y][x + 1].0) {
+                VoxelType::Empty => {}
+                _ => neighbors[5] = true,
+            }
+        }
+
+        neighbors
+    }
 }
 
-pub fn chunk_handler(
+pub fn chunk_spawner(
     mut commands: Commands,
-    world: Res<VoxelWorldRes>,
-    player_position_res: Res<PlayerPosition>,
+    mut world: ResMut<VoxelWorldRes>,
     player_position: Single<&Transform, With<Player>>,
+    mut last_chunk_pos: ResMut<LastChunkPos>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let chunk_x = player_position.translation.x.floor() as i32 % CHUNK_WIDTH as i32;
-    let chunk_y = player_position.translation.y.floor() as i32 % CHUNK_WIDTH as i32;
+    let chunk_x = (player_position.translation.x / CHUNK_WIDTH as f32).floor() as i32;
+    let chunk_y = (player_position.translation.z / CHUNK_WIDTH as f32).floor() as i32;
+    if chunk_x == last_chunk_pos.0.x && chunk_y == last_chunk_pos.0.y {
+        return;
+    }
+    last_chunk_pos.0.x = chunk_x;
+    last_chunk_pos.0.y = chunk_y;
 
     for y in chunk_y - RENDER_DISTANCE..chunk_y + RENDER_DISTANCE {
         for x in chunk_x - RENDER_DISTANCE..chunk_x + RENDER_DISTANCE {
-            let binding = world.0.chunks.lock().unwrap();
-            let chunk = binding.get(&[x, y]);
-            if let Some(chunk) = chunk {
+            let chunk = world.0.chunks.get(&[x, y]);
+            if let None = chunk {
+                world.0.chunks.insert([x, y], Chunk::default());
+                world.0.gen_chunk([x, y]);
+                let chunk = world.0.chunks.get(&[x, y]).unwrap();
                 let world_x = (x * CHUNK_WIDTH as i32) as f32;
                 let world_y = (y * CHUNK_WIDTH as i32) as f32;
                 commands.spawn((
@@ -108,19 +157,6 @@ pub fn chunk_handler(
             } else {
                 continue;
             }
-        }
-    }
-}
-
-pub fn chunk_loader(world: Arc<VoxelWorld>, player_position: Arc<Mutex<Vec3>>) {
-    for y in -RENDER_DISTANCE..RENDER_DISTANCE {
-        for x in -RENDER_DISTANCE..RENDER_DISTANCE {
-            world
-                .chunks
-                .lock()
-                .unwrap()
-                .insert([x, y], Chunk::default());
-            world.gen_chunk([x, y]);
         }
     }
 }

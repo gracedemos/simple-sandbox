@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::collections::HashMap;
 
 use bevy::prelude::*;
 use noise::{Fbm, MultiFractal, NoiseFn, Perlin};
@@ -15,24 +12,23 @@ pub const WORLD_SCALE: f64 = 0.5;
 pub const WORLD_FREQUENCY: f64 = 0.01;
 
 pub struct VoxelWorld {
-    pub chunks: Mutex<HashMap<[i32; 2], Chunk>>,
+    pub chunks: HashMap<[i32; 2], Chunk>,
     pub noise: Fbm<Perlin>,
 }
 
 #[derive(Resource)]
-pub struct VoxelWorldRes(pub Arc<VoxelWorld>);
+pub struct VoxelWorldRes(pub VoxelWorld);
 
 impl VoxelWorld {
     pub fn new(seed: u32) -> Self {
-        let chunks = Mutex::new(HashMap::new());
+        let chunks = HashMap::new();
         let noise = Fbm::new(seed).set_frequency(WORLD_FREQUENCY);
 
         VoxelWorld { chunks, noise }
     }
 
-    pub fn gen_chunk(&self, position: [i32; 2]) {
-        let mut binding = self.chunks.lock().unwrap();
-        let chunk = binding.get_mut(&position).unwrap();
+    pub fn gen_chunk(&mut self, position: [i32; 2]) {
+        let chunk = self.chunks.get_mut(&position).unwrap();
         for z in 0..CHUNK_WIDTH {
             for x in 0..CHUNK_WIDTH {
                 let position_f64 = [

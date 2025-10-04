@@ -1,6 +1,4 @@
-use std::sync::{Arc, Mutex, mpsc::Sender};
-
-use bevy::{input::mouse::AccumulatedMouseMotion, math::VectorSpace, prelude::*};
+use bevy::{input::mouse::AccumulatedMouseMotion, prelude::*};
 
 use crate::physics::Physics;
 
@@ -13,9 +11,6 @@ pub const SPAWN_POSITION: Vec3 = Vec3 {
     y: 65.0,
     z: 0.0,
 };
-
-#[derive(Resource)]
-pub struct PlayerPosition(pub Arc<Mutex<Vec3>>);
 
 #[derive(Component)]
 pub struct Player {
