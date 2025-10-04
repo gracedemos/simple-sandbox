@@ -1,7 +1,7 @@
 use bevy::{
     pbr::wireframe::{WireframeConfig, WireframePlugin},
     prelude::*,
-    window::WindowMode,
+    window::{CursorOptions, PrimaryWindow, WindowMode},
 };
 
 use crate::{
@@ -24,6 +24,10 @@ fn main() {
             DefaultPlugins.set(WindowPlugin {
                 primary_window: Some(Window {
                     mode: WindowMode::BorderlessFullscreen(MonitorSelection::Current),
+                    ..Default::default()
+                }),
+                primary_cursor_options: Some(CursorOptions {
+                    visible: false,
                     ..Default::default()
                 }),
                 ..Default::default()
